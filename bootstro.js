@@ -20,11 +20,11 @@ $(document).ready(function(){
         var popovers = []; //contains array of the popovers data
         var activeIndex = null; //index of active item
         var active = false;
-   
+        var timer = null;
         var defaults = {
             nextButton : '<button class="btn btn-primary btn-mini bootstro-next-btn">Next &raquo;</button>',
             prevButton : '<button class="btn btn-primary btn-mini bootstro-prev-btn">&laquo; Prev</button>',
-            finishButton : '<button class="btn btn-mini btn-success bootstro-finish-btn"><i class="icon-ok"></i> Ok I got it, get back to the site</button>',
+            finishButton : '',//'<button class="btn btn-mini btn-success bootstro-finish-btn"><i class="icon-ok"></i> Ok I got it, get back to the site</button>',
             stopOnBackdropClick : true,
             stopOnEsc : true
         };
@@ -39,8 +39,8 @@ $(document).ready(function(){
         
         function add_nav_btn(content, i, settingsOverride)
         {
-            
-            var s = $.extend(bootstro.settings, settingsOverride);
+
+            var s = $.extend({}, bootstro.settings, settingsOverride);
             count = bootstro.count;
             content = content + "<div class='bootstro-nav-wrapper'>";
             if (count != 1)
@@ -61,10 +61,15 @@ $(document).ready(function(){
         bootstro.settings = {};
         bootstro.count = 0;
         //get the element to intro at stack i 
-        get_element_from_storyboard = function(i)
+        get_element_from_storyboard = function(i, Scene)
         {
-            var scene = bootstro.settings.storyboard[i];
-          
+            var scene = $.extend({},bootstro.settings.storyboard[i], Scene);
+            
+            if(scene.element instanceof Function)
+            {
+                console.log("CALL STACK!");
+                return $(scene.element.call(this));
+            }
             return $(scene.element);
         }
         
@@ -89,17 +94,17 @@ $(document).ready(function(){
             }
         }
         
-        get_popup_from_storyboard = function(i)
+        get_popup_from_storyboard = function(i, Scene)
         {
             var p = {};
-            var scene = bootstro.settings.storyboard[i];
-            var t = '';
+            var scene = $.extend({}, bootstro.settings.storyboard[i], Scene);
+            var t = '<button type="button" class="close bootstro-finish-btn">&times;</button> ';
             var count = bootstro.count;
             if (count > 1)
             {
-                t = "<span class='label label-success'>" + (i +1)  + "/" + count + "</span>";
+                t += "<span class='label label-success'>" + (i +1)  + "/" + count + "</span>";
             }
-            p.title = '';
+            p.title = scene.title;
             if (p.title != '' && t != '')
                 p.title = t + ' - ' + p.title;
             else if (p.title == '') 
@@ -111,8 +116,8 @@ $(document).ready(function(){
             var buttons = ["nextButton", "prevButton", "finishButton"];
             for (var x in buttons)
             {
-                if(buttons[x] in bootstro.settings.storyboard[i])
-                    settingsOverride[buttons[x]] = bootstro.settings.storyboard[i][buttons[x]];
+                if(buttons[x] in scene)
+                    settingsOverride[buttons[x]] = scene[buttons[x]];
             }
             
             p.content = add_nav_btn(p.content, i, settingsOverride);
@@ -131,12 +136,14 @@ $(document).ready(function(){
             }
             p.trigger = 'manual'; //always set to manual.
            
-            p.html = scene.html || 'top';
+            p.html = scene.html || true;
             
             //resize popover if it's explicitly specified
             //note: this is ugly. Could have been best if popover supports width & height
             p.template = '<div class="popover" style="' + style + '"><div class="arrow"></div><div class="popover-inner"><h3 class="popover-title"></h3><div class="popover-content"><p></p></div></div>' +
              '</div>';
+     
+            
             
             return p;
         }
@@ -174,7 +181,7 @@ $(document).ready(function(){
             }
             p.trigger = 'manual'; //always set to manual.
            
-            p.html = $el.attr('data-bootstro-html') || 'top';
+            p.html = $el.attr('data-bootstro-html') || true;
             
             //resize popover if it's explicitly specified
             //note: this is ugly. Could have been best if popover supports width & height
@@ -196,7 +203,7 @@ $(document).ready(function(){
                     $el = get_element_from_storyboard(i);
                 else
                     $el = get_element(i);
-                $el.popover('destroy').removeClass('bootstro-highlight');
+                $el.popover('destroy').removeClass('bootstro-highlight').off(".bootstro");
             }
             /*
             else //destroy all
@@ -217,7 +224,6 @@ $(document).ready(function(){
                 var storyboard = bootstro.settings.storyboard;
                 for(var x in storyboard)
                 {
-                    console.log(x);
                     if(storyboard[x].onStop && (storyboard[x].onStop instanceof Function))
                         storyboard[x].onStop(storyboard[x]);
                 }
@@ -230,12 +236,15 @@ $(document).ready(function(){
             bootstro.destroy_popover(activeIndex);
             bootstro.unbind();
             $("div.bootstro-backdrop").remove();
+            
+            if(timer)
+                clearTimeout(timer);
+            
             this.active = false;
         };
-
         
         //go to the popover number idx starting from 0
-        bootstro.go_to = function(idx) 
+        bootstro.go_to = function(idx, scene) 
         {
             //call onStep callback function if needed
             if (this.onStepFunc != undefined) {
@@ -247,18 +256,45 @@ $(document).ready(function(){
             {
                 if(bootstro.settings.storyboard)
                 {
-                    p = get_popup_from_storyboard(idx);
-                    $el = get_element_from_storyboard(idx);
+                    p = get_popup_from_storyboard(idx, scene);
+                    $el = get_element_from_storyboard(idx, scene);
                 }
                 else
                 {
                     p = get_popup(idx);
                     $el = get_element(idx);
                 }
-
+                
+                if($el.length==0)
+                {
+                    //trickery incase we are waiting for content to load.
+                    
+                    timer = setTimeout(function(){
+                        bootstro.go_to(idx);
+                    },1000);
+                    
+                    return;
+                }
+                
+                $el.on("keydown.bootstro", function(e){                    
+                  var code = e.which || e.keyCode;
+                  if(code == 13) 
+                  {
+                        bootstro.next();
+                        e.preventDefault();
+                        return false;
+                  }
+                  if(code == 9)
+                  {
+                        bootstro.next();
+                        e.preventDefault();
+                        return false;
+                  }
+                });
+         
                 $el.popover(p).popover('show');
                 if( ("onShow" in bootstro.settings.storyboard[idx]) && (bootstro.settings.storyboard[idx].onShow instanceof Function) )
-                    bootstro.settings.storyboard[idx].onShow();
+                    bootstro.settings.storyboard[idx].onShow(bootstro.settings.storyboard[idx]);
                 
                 
                 min = Math.min($(".popover.in").offset().top, $el.offset().top);
@@ -271,7 +307,7 @@ $(document).ready(function(){
                 activeIndex = idx;
             }
         };
-        bootstro.next = function()
+        bootstro.next = function(scene)
         {
           
             if (activeIndex + 1 == count)
@@ -280,9 +316,10 @@ $(document).ready(function(){
                 if (this.onCompleteFunc != undefined) {
                     this.onCompleteFunc.call(this);
                 }
+                bootstro.stop();
             }
             else 
-                bootstro.go_to(activeIndex + 1);
+                bootstro.go_to(activeIndex + 1, scene);
         };
         
         bootstro.prev = function()
@@ -338,12 +375,19 @@ $(document).ready(function(){
             $("html").on('click.bootstro', ".bootstro-finish-btn", function(e){
                 bootstro.stop();
             });        
-            
+    
             if (bootstro.settings.stopOnBackdropClick)
             {
                 $("html").on('click.bootstro', 'div.bootstro-backdrop', function(e){
                     if ($(e.target).hasClass('bootstro-backdrop'))
                         bootstro.stop();
+                });
+            }
+            else
+            {
+                $("html").on('click.bootstro', 'div.bootstro-backdrop', function(e){
+                    e.preventDefault();
+                    return false;
                 });
             }
                 

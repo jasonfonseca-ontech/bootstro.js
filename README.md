@@ -26,7 +26,18 @@ boostro.start({
 
 You can input "scene's" into the storyboard array. You can also use this method for late bindings - the element is only bound after the next button is clicked - which works well when you need to ajax in contents.
 
-onShow is triggered when the popup is shown and can be used to add extra event handlers, for example when you want to give instructions like "Click new product" and then hide the next button (effectively making the 'new product' button the next button). If you namespace your objects, hanging off $("html") as ".bootstro" they will be removed during the bootstro.stop(). However, if you can't do that - for example sometimes previous click handlers turn off event bubbling (`e.preventDefault()`) then just use onStop function to clean it up.
+onShow is triggered when the popup is shown and can be used to add extra event handlers, for example when you want to give instructions like "Click new product" and then hide the next button (effectively making the 'new product' button the next button). 
+
+If you namespace your objects, hanging off $("html") as ".bootstro" they will be removed during the bootstro.stop(). However, if you can't do that - for example sometimes previous click handlers turn off event bubbling (`e.preventDefault()`) then just use onStop function to clean it up.
+Keep events namespaced and hang off html if you want them to be cleaned automatically. Otherwise use the onStop handler for each scene to clean up.
+
+Other Cool Stuff
+===============
+
+- You can overwrite a scene during run time - when you call .next() or .prev() you can supply a scene that will overwrite what is currently in the next or previous scene.
+- If you can't hook into ajax complete events using the above tools (and the onShow() events) then you can just target the element that will be created anyway and the script will wait for it to appear before it binds the popover. (it checks every second)
+
+
 
 Bootstro.js
 ========
